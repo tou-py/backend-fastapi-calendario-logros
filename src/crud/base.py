@@ -7,14 +7,13 @@ from typing import Type, TypeVar, Optional, Tuple, List, Any, Dict, Union
 import threading
 import time
 from datetime import datetime
-from utils import DataValidator
-
+from src.utils.validator import DataValidator
 
 convention = {
     "ix": "id_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
     "ck": "ck_%(table_name)s_%(constraint_name)s",
-    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referenced_table_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s",
     "pk": "pk_%(table_name)s",
 }
 
@@ -23,12 +22,10 @@ T = TypeVar("T", bound="Base")
 connection_semaphore = threading.Semaphore(20)  # Se limitan 20 conexiones concurrentes
 
 
-class Base(DeclarativeBase):
+class Base(DeclarativeBase, DataValidator):
     __abstract__ = True
 
     metadata = MetaData(naming_convention=convention)
-
-    entity_data_validator = DataValidator.validate_entity_data()
 
     def __repr__(self):
         """
@@ -259,7 +256,7 @@ class Base(DeclarativeBase):
         """
         try:
             # Validar datos de entrada
-            self.__class__.entity_data_validator(kwargs)
+            self.__class__.validate_entity_data(kwargs)
 
             # Guardar versión actual y la incrementamos
             current_version = self.version
