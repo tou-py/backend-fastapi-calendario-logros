@@ -1,11 +1,11 @@
 from sqlalchemy import MetaData, select, func, inspect, and_
-from sqlalchemy.orm import DeclarativeBase, Session, Mapped, mapped_column
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from typing import Type, TypeVar, Optional, Tuple, List, Any, Dict, Union
-import threading
-import time
+import asyncio
 from datetime import datetime
 from src.utils.validator import DataValidator
 
@@ -19,7 +19,7 @@ convention = {
 
 T = TypeVar("T", bound="Base")
 
-connection_semaphore = threading.Semaphore(20)  # Se limitan 20 conexiones concurrentes
+connection_semaphore = asyncio.Semaphore(20)  # Se limitan 20 conexiones concurrentes
 
 
 class Base(DeclarativeBase, DataValidator):
@@ -28,9 +28,6 @@ class Base(DeclarativeBase, DataValidator):
     metadata = MetaData(naming_convention=convention)
 
     def __repr__(self):
-        """
-        Representacion legible de la instancia
-        """
         columns = ", ".join(
             [
                 f"{key}={repr(value)}"
@@ -42,27 +39,18 @@ class Base(DeclarativeBase, DataValidator):
 
     @classmethod
     def get_pk_name(cls) -> str:
-        """
-        obtiene el nombre dde la clave primaria de la entidad
-        """
         return inspect(cls).primary_key[0].name
 
     @staticmethod
-    @contextmanager
-    def acquire_connection():
-        """
-        Administrador de contexto para limitar el número de conexiones concurrentes.
-        Usa un semáforo para controlar el número máximo de conexiones.
-        """
+    @asynccontextmanager
+    async def acquire_connection():
         acquired = False
         try:
-            # Intentar adquirir el semáforo con un tiempo de espera
-            for attempt in range(5):  # 5 intentos
-                acquired = connection_semaphore.acquire(blocking=False)
+            for attempt in range(5):
+                acquired = await connection_semaphore.acquire()
                 if acquired:
                     break
-                # Esperar antes de reintentar
-                time.sleep(0.5)
+                await asyncio.sleep(0.5)
 
             if not acquired:
                 raise Exception(
@@ -75,31 +63,17 @@ class Base(DeclarativeBase, DataValidator):
                 connection_semaphore.release()
 
     @classmethod
-    @contextmanager
-    def transaction(cls, session: Session, isolation_level=None, retry_count=3):
-        """
-        Administrador de contexto para manejar transacciones con soporte para niveles de aislamiento
-        y reintentos.
-
-        Args:
-            session: Sesión de SQLAlchemy
-            isolation_level: Nivel de aislamiento de la transacción
-            retry_count: Número de reintentos para transacciones fallidas
-
-        Yields:
-            La sesión proporcionada
-
-        Raises:
-            Exception: Si ocurre un error durante la transacción
-        """
-        with cls.acquire_connection():
-            # Guardar el nivel de aislamiento actual si se especificó uno nuevo
+    @asynccontextmanager
+    async def transaction(
+        cls, session: AsyncSession, isolation_level=None, retry_count=3
+    ):
+        async with cls.acquire_connection():
             current_isolation = None
-            connection = session.connection()
+            connection = await session.connection()
 
             if isolation_level:
-                current_isolation = connection.get_isolation_level()
-                connection.execution_options(isolation_level=isolation_level)
+                current_isolation = await connection.get_isolation_level()
+                await connection.execution_options(isolation_level=isolation_level)
 
             attempts = 0
             last_error = None
@@ -108,57 +82,45 @@ class Base(DeclarativeBase, DataValidator):
                 attempts += 1
                 try:
                     yield session
-                    session.commit()
+                    await session.commit()
                     break
                 except StaleDataError as e:
-                    session.rollback()
+                    await session.rollback()
                     last_error = e
                     if attempts < retry_count:
-                        time.sleep(0.1 * attempts)  # Backoff exponencial
+                        await asyncio.sleep(0.1 * attempts)
                     else:
                         raise Exception(
                             f"Error de concurrencia después de {retry_count} intentos: {str(e)}"
                         )
                 except IntegrityError as e:
-                    session.rollback()
+                    await session.rollback()
                     raise Exception(
                         f"Error de integridad en la base de datos: {str(e)}"
                     )
                 except SQLAlchemyError as e:
-                    session.rollback()
+                    await session.rollback()
                     raise Exception(f"Error de base de datos: {str(e)}")
                 except Exception as e:
-                    session.rollback()
+                    await session.rollback()
                     raise Exception(f"Error en la operación: {str(e)}")
                 finally:
-                    # Restaurar el nivel de aislamiento si se cambió
                     if current_isolation:
-                        connection.execution_options(isolation_level=current_isolation)
+                        await connection.execution_options(
+                            isolation_level=current_isolation
+                        )
 
     @classmethod
-    def read_all(
+    async def read_all(
         cls: Type[T],
-        session: Session,
+        session: AsyncSession,
         page: Optional[int] = None,
         page_size: Optional[int] = None,
     ) -> Tuple[List[T], int]:
-        """
-        Lee todas las entidades, con paginacion
-
-        Args:
-            session: Session de SQLAlchemy
-            page: numero de pagina
-            page_size: tamanio de la pagina
-
-        Returns:
-            Tupla con la lista de entidades y el total de registros
-        """
-
         try:
             query = select(cls)
             count_query = select(func.count()).select_from(cls)
 
-            # Aplicar paginacion si se especifica
             if page is not None and page_size is not None:
                 if page < 1:
                     page = 1
@@ -167,9 +129,9 @@ class Base(DeclarativeBase, DataValidator):
 
                 query = query.offset((page - 1) * page_size).limit(page_size)
 
-            with cls.transaction(session, isolation_level="READ COMMITED"):
-                results = session.scalars(query).all()
-                total_count = session.scalar(count_query)
+            async with cls.transaction(session, isolation_level="READ COMMITTED"):
+                results = (await session.scalars(query)).all()
+                total_count = await session.scalar(count_query)
 
             return results, total_count
 
@@ -177,25 +139,12 @@ class Base(DeclarativeBase, DataValidator):
             raise Exception(f"Error al leer las entidades: {str(ex)}")
 
     @classmethod
-    def read_by_id(cls: Type[T], session: Session, object_id: Any) -> T:
-        """
-        Lee una entidad por su ID.
-
-        Args:
-            session: Sesión de SQLAlchemy
-            object_id: ID del objeto a buscar
-
-        Returns:
-            La entidad encontrada
-
-        Raises:
-            EntityNotFoundException: Si no se encuentra la entidad
-        """
+    async def read_by_id(cls: Type[T], session: AsyncSession, object_id: Any) -> T:
         try:
             pk_name = cls.get_pk_name()
             statement = select(cls).where(getattr(cls, pk_name) == object_id)
 
-            entity = session.scalar(statement)
+            entity = await session.scalar(statement)
 
             if entity is None:
                 raise Exception(
@@ -211,65 +160,32 @@ class Base(DeclarativeBase, DataValidator):
             )
 
     @classmethod
-    def create(cls: Type[T], session: Session, **kwargs) -> T:
-        """
-        Crea una nueva instancia de la entidad.
-
-        Args:
-            session: Sesión de SQLAlchemy
-            **kwargs: Atributos para la nueva entidad
-
-        Returns:
-            La nueva entidad creada
-
-        Raises:
-            ValidationError: Si los datos no son válidos
-            CRUDException: Si ocurre un error durante la creación
-        """
+    async def create(cls: Type[T], session: AsyncSession, **kwargs) -> T:
         try:
-            # Validar datos de entrada
             cls.validate_entity_data(kwargs)
 
-            # Crear y persistir entidad
-            with cls.transaction(
+            async with cls.transaction(
                 session, isolation_level="REPEATABLE READ", retry_count=3
             ):
                 obj = cls(**kwargs)
                 session.add(obj)
-                session.flush()
+                await session.flush()
                 return obj
         except Exception as e:
             raise Exception(f"Error al crear {cls.__name__}: {str(e)}")
 
-    def update(self, session: Session, **kwargs) -> None:
-        """
-        Actualiza los atributos de la entidad usando control de versiones optimista.
-
-        Args:
-            session: Sesión de SQLAlchemy
-            **kwargs: Nuevos valores para los atributos
-
-        Raises:
-            ValidationError: Si los datos no son válidos
-            ConcurrencyError: Si hay un conflicto de concurrencia
-            CRUDException: Si ocurre un error durante la actualización
-        """
+    async def update(self, session: AsyncSession, **kwargs) -> None:
         try:
-            # Validar datos de entrada
             self.__class__.validate_entity_data(kwargs)
 
-            # Guardar versión actual y la incrementamos
             current_version = self.version
 
-            # Actualizar atributos
-            with self.__class__.transaction(
+            async with self.__class__.transaction(
                 session, isolation_level="REPEATABLE READ", retry_count=3
             ):
-                # Verificar que la versión no ha cambiado
                 pk_name = self.__class__.get_pk_name()
                 pk_value = getattr(self, pk_name)
 
-                # Consulta que verifica la versión
                 verification = (
                     select(self.__class__)
                     .where(
@@ -281,18 +197,17 @@ class Base(DeclarativeBase, DataValidator):
                     .with_for_update()
                 )
 
-                entity = session.scalar(verification)
+                entity = await session.scalar(verification)
                 if not entity:
                     raise Exception(f"La entidad ha sido modificada por otro proceso")
 
-                # Actualizar atributos
                 for key, value in kwargs.items():
                     if hasattr(self, key):
                         setattr(self, key, value)
 
                 self.updated_at = datetime.now()
 
-                session.flush()
+                await session.flush()
 
         except StaleDataError as e:
             raise Exception(f"Conflicto de concurrencia al actualizar: {str(e)}")
@@ -300,32 +215,17 @@ class Base(DeclarativeBase, DataValidator):
             raise Exception(f"Error al actualizar {self.__class__.__name__}: {str(e)}")
 
     @classmethod
-    def delete(cls: Type[T], session: Session, obj: Union[T, Any]) -> None:
-        """
-        Elimina una entidad.
-
-        Args:
-            session: Sesión de SQLAlchemy
-            obj: Entidad a eliminar o ID de la entidad
-
-        Raises:
-            EntityNotFoundException: Si no se encuentra la entidad
-            ConcurrencyError: Si hay un conflicto de concurrencia
-            CRUDException: Si ocurre un error durante la eliminación
-        """
+    async def delete(cls: Type[T], session: AsyncSession, obj: Union[T, Any]) -> None:
         try:
-            # Si se pasó un ID en lugar de un objeto, obtener el objeto primero
             if not isinstance(obj, cls):
-                obj = cls.read_by_id(session, obj, lock_mode="FOR UPDATE")
+                obj = await cls.read_by_id(session, obj)
 
             pk_name = cls.get_pk_name()
             pk_value = getattr(obj, pk_name)
 
-            # Eliminar entidad
-            with cls.transaction(
+            async with cls.transaction(
                 session, isolation_level="REPEATABLE READ", retry_count=3
             ):
-                # Verificar que la versión no ha cambiado
                 verification = (
                     select(cls)
                     .where(
@@ -336,12 +236,12 @@ class Base(DeclarativeBase, DataValidator):
                     .with_for_update()
                 )
 
-                entity = session.scalar(verification)
+                entity = await session.scalar(verification)
                 if not entity:
                     raise Exception(f"La entidad ha sido modificada por otro proceso")
 
-                session.delete(obj)
-                session.flush()
+                await session.delete(obj)
+                await session.flush()
 
         except StaleDataError as e:
             raise Exception(f"Conflicto de concurrencia al eliminar: {str(e)}")
