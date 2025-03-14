@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from src.config import settings
 from src.database import sessionmanager
-from src.api.v1.endpoints.users import router as users_router
+from src.api.v1.endpoints.auth import router as users_router
 
 
 @asynccontextmanager
