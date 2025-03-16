@@ -49,11 +49,12 @@ class DatabaseSessionManager:
 
 # Inicialización del session manager con configuración asíncrona
 sessionmanager = DatabaseSessionManager(
-    settings.DATABASE_URL, {"echo": settings.ECHO_SQL}
+    settings.DATABASE_URL, {"echo": settings.ECHO_SQL, "pool_size": 120}
 )
 
 
 # Dependencia para FastAPI: Obtener sesión async
 async def get_db_session():
     async with sessionmanager.session() as session:
-        yield session
+        async with session.begin():
+            yield session

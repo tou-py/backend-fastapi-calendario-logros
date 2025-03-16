@@ -1,14 +1,14 @@
-from fastapi import Depends, HTTPException, APIRouter
+from fastapi import Depends, HTTPException, APIRouter, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.utils.auth.user_auth import (
     create_tokens,
     refresh_tokens,
 )
 from src.models.models import User
 from src.database import get_db_session
-from src.schemas.schemas import UserCreate
 from src.schemas.schemas import UserCreate, UserResponse
+from src.services.user_services import UserService
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ router = APIRouter()
 @router.post("/token")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    session: Session = Depends(get_db_session),
+    session: AsyncSession = Depends(get_db_session),
 ):
     """Verifica las credenciales y devuelve access y refresh tokens."""
     user = session.query(User).filter(User.username == form_data.username).first()
@@ -44,21 +44,23 @@ async def refresh_token(refresh_token: str):
     }
 
 
-@router.post("/register", response_model=UserResponse)
-async def register_user(user: UserCreate, session: Session = Depends(get_db_session)):
-    if not user:
-        raise HTTPException(
-            status_code=400, detail="An username and password should be provided"
-        )
+@router.post(
+    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
+async def register_user(
+    user_data: UserCreate = Body(...), session: AsyncSession = Depends(get_db_session)
+):
     try:
-        new_user = User(
-            username=user.username,
-            email=user.email,
-            hashed_password=User.hash_password(user.password),
+        # Validación explícita de datos requeridos
+        if not user_data.email:
+            raise ValueError("El correo electrónico es obligatorio")
+
+        user = await UserService.create_user(session, user_data)
+        return user
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en el registro: {str(e)}",
         )
-        session.add(new_user)
-        session.commit()
-        session.refresh(new_user)
-        return {"message": "User registered succesfully"}
-    except Exception as ex:
-        raise HTTPException(status_code=400, detail=f"str{ex}")

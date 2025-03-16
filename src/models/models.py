@@ -3,7 +3,7 @@ from sqlalchemy import String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
 import bcrypt
 import re
 import uuid
@@ -44,13 +44,13 @@ class User(Base):
             password.encode("utf-8"), self.hashed_password.encode("utf-8")
         )
 
-    def validate_entity_data(self, data):
-        super().validate_entity_data(data)
+    def validate_user_data(self, **kwargs):
+        if "email" in kwargs and hasattr(self, "email"):
+            import re
 
-        if "email" in data and not re.match(email_regex, data["email"]):
-            raise ValueError("El correo proporcionado no es válido")
-
-        return True
+            email_regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+            if not re.match(email_regex, kwargs["email"]):
+                raise ValueError("El correo proporcionado no es válido")
 
 
 class Activity(Base):

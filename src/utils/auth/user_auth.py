@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from src.config import settings
 from src.models.models import User
 from src.database import get_db_session
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
@@ -47,10 +47,9 @@ def create_tokens(username: str):
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme), session: Session = Depends(get_db_session)
+    token: str = Depends(oauth2_scheme), session: AsyncSession = Depends(get_db_session)
 ):
-    """Valida el token de acceso y devuelve el usuario autenticado."""
-    credentials_exception = HTTPException(
+    credential_exception = HTTPException(
         status_code=401,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
@@ -59,15 +58,15 @@ def get_current_user(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
-            raise credentials_exception
-
-        user = session.query(User).filter(User.username == username).first()
-        if user is None:
-            raise credentials_exception
-
-        return user
+            raise credential_exception
     except JWTError:
-        raise credentials_exception
+        raise credential_exception
+
+    user = session.query(User).filter(User.username == username).first()
+    if user is None:
+        raise credential_exception
+
+    return user  # Retorna el usuario autenticado
 
 
 def refresh_tokens(refresh_token: str):

@@ -1,18 +1,23 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from datetime import datetime
 from typing import List, Optional
+import re
 
 
 # Modelo base con atributos comunes
 class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=20)
-    email: EmailStr
+    email: EmailStr = Field(...)
     is_active: bool = True
     is_staff: bool = False
 
-    @field_validator("email")
-    def validate_email(cls, email):
-        pass
+    @field_validator("username")
+    def username_alphanumeric(cls, v):
+        if not re.match(r"^[a-zA-Z0-9_]+$", v):
+            raise ValueError(
+                "El nombre de usuario solo puede contener letras, números y guiones bajos"
+            )
+        return v
 
 
 # Modelo para crear usuario (se requiere la contraseña en texto plano)
@@ -33,7 +38,6 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
     id: str
     last_login: datetime
-    activities: List["ActivityResponse"] = []
 
     model_config = ConfigDict(from_attributes=True)
 
