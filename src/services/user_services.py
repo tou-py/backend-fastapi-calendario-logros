@@ -40,63 +40,48 @@ class UserService:
     async def create_user(session: AsyncSession, user_data: UserCreate) -> User:
         """Crea un nuevo usuario manejando errores de validación y base de datos."""
         try:
-            # Validación básica de campos
-            if not user_data.email:
-                raise ValueError("El correo electrónico es obligatorio")
-            if not user_data.username:
-                raise ValueError("El nombre de usuario es obligatorio")
-
-            # Verificación de existencia con manejo de errores
-            try:
-                existing_email = await UserService.get_by_email(
-                    session, user_data.email
-                )
-                existing_username = await UserService.get_by_username(
-                    session, user_data.username
-                )
-            except ValueError as e:
-                raise ValueError(f"Error en verificación de datos: {str(e)}") from e
-
-            if existing_email:
-                raise ValueError("El correo electrónico ya está registrado")
-            if existing_username:
-                raise ValueError("El nombre de usuario ya está en uso")
-
-            # Procesamiento seguro de contraseña
+            # valida campos obligatorios
+            required_fields = {"username", "email", "password"}
             user_dict = user_data.model_dump()
-            try:
-                password = user_dict.pop("password")
-            except KeyError:
-                raise ValueError("La contraseña es obligatoria")
 
-            try:
-                hashed_password = User().hash_password(password)
-            except (TypeError, ValueError) as e:
-                raise ValueError(f"Error al hashear la contraseña: {str(e)}") from e
+            missing_fields = [
+                field for field in required_fields if not user_dict.get(field)
+            ]
 
-            user_dict["hashed_password"] = hashed_password
+            if missing_fields:
+                raise ValueError(
+                    f"Faltan los siguientes campos obligatorios: {',' .join(missing_fields)}"
+                )
 
-            # Creación de usuario con manejo de transacciones
+            # verificar si el usuario ya existe
+            if await UserService.get_by_email(session, user_data.email):
+                raise ValueError("El correo ya esta registrado")
+            if await UserService.get_by_username(session, user_data.username):
+                raise ValueError("El nombre de usuario no se encuentra disponible")
+
+            password = user_dict.pop("password", None)
+            if not password:
+                raise ValueError("La contrasnia es obligatoria")
+
+            user_dict["hashed_password"] = User.hash_password(password)
+
+            # crear el usuario
             try:
-                user = await User.create(session, **user_dict)
-                return user
-            except IntegrityError as e:
+                return await User.create(session, **user_dict)
+            except IntegrityError:
                 await session.rollback()
                 raise ValueError(
-                    "Conflicto de datos únicos: El email o username ya existen"
-                ) from e
-            except SQLAlchemyError as e:
+                    "Conflicto de datos unicos, email o username ya en uso"
+                )
+            except SQLAlchemyError as ex:
                 await session.rollback()
                 raise ValueError(
-                    f"Error de base de datos al crear usuario: {str(e)}"
-                ) from e
+                    f"Error en base de datos al crear usuario: {str(ex)}"
+                ) from ex
 
-        except StaleDataError as e:
+        except (StaleDataError, ValueError) as ex:
             await session.rollback()
-            raise ValueError("Conflicto de concurrencia al crear el usuario") from e
-        except ValueError as e:
+            raise ex
+        except Exception as ex:
             await session.rollback()
-            raise  # Re-lanza los ValueError ya formateados
-        except Exception as e:
-            await session.rollback()
-            raise ValueError(f"Error inesperado: {str(e)}") from e
+            raise ValueError(f"Error inesperado: {str(ex)}") from ex

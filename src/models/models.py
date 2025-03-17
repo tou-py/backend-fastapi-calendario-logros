@@ -36,7 +36,8 @@ class User(Base):
     # Relación 1:M con Activity
     activities: Mapped[List["Activity"]] = relationship(back_populates="user")
 
-    def hash_password(self, password: str) -> str:
+    @staticmethod
+    def hash_password(password: str) -> str:
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
     def verify_password(self, password: str) -> bool:
