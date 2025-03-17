@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException, APIRouter, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.utils.auth.user_auth import (
     create_tokens,
@@ -19,7 +20,10 @@ async def login(
     session: AsyncSession = Depends(get_db_session),
 ):
     """Verifica las credenciales y devuelve access y refresh tokens."""
-    user = session.query(User).filter(User.username == form_data.username).first()
+    result = await session.execute(
+        select(User).filter(User.username == form_data.username)
+    )
+    user = result.scalars().first()
 
     if not user or not user.verify_password(form_data.password):
         raise HTTPException(status_code=401, detail="Invalid username or password")
