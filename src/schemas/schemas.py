@@ -83,6 +83,11 @@ class ActivityTypeCreate(ActivityTypeBase):
     activity_id: str
 
 
+class ActivityTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    color_asigned: Optional[str] = None
+
+
 class ActivityTypeResponse(ActivityTypeBase):
     id: str
     activity_id: str

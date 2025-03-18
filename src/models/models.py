@@ -2,6 +2,8 @@ from pydantic import EmailStr
 from sqlalchemy import String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from datetime import datetime
 from typing import List, Dict, Any
 import bcrypt
@@ -74,8 +76,22 @@ class Activity(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     user: Mapped["User"] = relationship(back_populates="activities")
 
-    # Relación 1:M con ActivityType
-    types: Mapped[List["ActivityType"]] = relationship(back_populates="activity")
+    # Relación M:1 con ActivityType (Cada actividad tiene un solo tipo)
+    type_id: Mapped[str] = mapped_column(ForeignKey("activity_types.id"))
+    type: Mapped["ActivityType"] = relationship(back_populates="activities")
+
+    async def set_default_type(self, session: AsyncSession):
+        """Asegura que la actividad tenga un tipo si no le es proveido uno"""
+        if not self.types:
+            result = await session.execute(
+                select(ActivityType).filter_by(name="General")
+            )
+            default_type = result.scalars().first()
+            if not default_type:
+                default_type = ActivityType(name="General", color_asigned="#F6F6F6")
+                session.add(default_type)
+                await session.commit()
+            self.types.append(default_type)
 
 
 class ActivityType(Base):
@@ -91,6 +107,5 @@ class ActivityType(Base):
     name: Mapped[str] = mapped_column(String(16), nullable=False)
     color_asigned: Mapped[str] = mapped_column(String(7), nullable=False)
 
-    # Relación M:1 con Activity
-    activity_id: Mapped[str] = mapped_column(ForeignKey("activities.id"))
-    activity: Mapped["Activity"] = relationship(back_populates="types")
+    # Relación 1:M con Activity (Un tipo puede pertenecer a muchas actividades)
+    activities: Mapped[List["Activity"]] = relationship(back_populates="type")

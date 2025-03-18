@@ -11,7 +11,7 @@ from src.database import get_db_session
 from src.schemas.schemas import UserCreate, UserResponse
 from src.services.user_services import UserService
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["User authentication"])
 
 
 @router.post("/token")
