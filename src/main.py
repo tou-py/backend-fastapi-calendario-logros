@@ -21,7 +21,10 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 def root():
-    return {"message": "La API funciona correctamente :)"}
+    return {
+        "message": "La API funciona correctamente :) ",
+        # "rutas": f"{str(users_router.routes)}",
+    }
 
 
 app.include_router(users_router)

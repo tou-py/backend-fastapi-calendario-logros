@@ -18,8 +18,18 @@ router = APIRouter(prefix="/auth", tags=["User authentication"])
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_db_session),
-):
-    """Verifica las credenciales y devuelve access y refresh tokens."""
+) -> dict[str:str]:
+    """
+    Verifica las credenciales y devuelve access y refresh tokens.
+
+    Args:
+        form_data (OAuth2PasswordRequestForm): Datos de usuario y contraseña.
+        session (AsyncSession): Sesión de base de datos.
+
+    Returns:
+        dict: Tokens de acceso y refresco
+
+    """
     result = await session.execute(
         select(User).filter(User.username == form_data.username)
     )
@@ -38,8 +48,16 @@ async def login(
 
 
 @router.post("/refresh")
-async def refresh_token(refresh_token: str):
-    """Recibe un refresh token y devuelve nuevos access y refresh tokens."""
+async def refresh_token(refresh_token: str) -> dict[str:str]:
+    """
+    Recibe un refresh token y devuelve nuevos access y refresh tokens.
+
+    Args:
+        refresh_token (str): Refresh token.
+
+    Returns:
+        dict: Tokens de acceso y refresco actualizados.
+    """
     new_access_token, new_refresh_token = refresh_tokens(refresh_token)
     return {
         "access_token": new_access_token,
@@ -53,14 +71,24 @@ async def refresh_token(refresh_token: str):
 )
 async def register_user(
     user_data: UserCreate = Body(...), session: AsyncSession = Depends(get_db_session)
-):
+) -> UserResponse:
+    """
+    Registra usuarios en la base de datos.
+
+    Args:
+        user_data (UserCreate): Datos del usuario en esquema de pydantic
+        session (AsyncSession): Session de la base de datos
+
+    Returns:
+        UserResponse: Datos del usuario
+    """
     try:
         # Validación explícita de datos requeridos
         if not user_data.email:
             raise ValueError("El correo electrónico es obligatorio")
 
         user = await UserService.create_user(session, user_data)
-        return user
+        return UserResponse.model_validate(user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:

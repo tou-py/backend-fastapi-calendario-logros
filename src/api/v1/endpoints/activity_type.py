@@ -14,7 +14,7 @@ router = APIRouter(prefix="/activity-types", tags=["Activity Types"])
 
 
 @router.post("/", response_model=ActivityTypeResponse)
-async def create_activity_type(
+async def create_activity_type_route(
     type_data: ActivityTypeCreate,
     db: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
@@ -33,7 +33,7 @@ async def create_activity_type(
 
 
 @router.put("/{type_id}", response_model=ActivityTypeResponse)
-async def update_activity_type(
+async def update_activity_type_route(
     type_id: str,
     type_data: ActivityTypeUpdate,
     db: AsyncSession = Depends(get_db_session),
@@ -53,7 +53,7 @@ async def update_activity_type(
 
 
 @router.delete("/{type_id}")
-async def delete_activity_type(
+async def delete_activity_type_route(
     type_id: str,
     db: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),

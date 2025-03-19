@@ -71,6 +71,8 @@ class ActivityResponse(ActivityBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+    model_config = {"from_attributes": True}
+
 
 class ActivityTypeBase(BaseModel):
     name: str = Field(..., min_length=3, max_length=16)
