@@ -27,7 +27,7 @@ async def create_activity_type_route(
             db, type_data.name, type_data.color_asigned
         )
         await db.commit()
-        return new_type
+        return ActivityTypeResponse.model_validate(new_type)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -47,7 +47,7 @@ async def update_activity_type_route(
             db, type_id, type_data.name, type_data.color_asigned
         )
         await db.commit()
-        return updated_type
+        return ActivityTypeResponse.model_validate(updated_type)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
