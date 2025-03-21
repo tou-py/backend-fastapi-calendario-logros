@@ -82,8 +82,7 @@ class Base(DeclarativeBase, DataValidator):
 
         obj = cls(**kwargs)
         session.add(obj)
-        await session.flush()
-        await session.refresh(obj)
+        await session.commit()
         return obj
 
     async def update(self, session: AsyncSession, **kwargs) -> None:

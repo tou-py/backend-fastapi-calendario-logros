@@ -4,6 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from sqlalchemy.orm import sessionmaker
 from src.config import settings
 
+# Construcción de la URL de la base de datos
+DATABASE_URL = (
+    f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@"
+    f"{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+)
+
 
 class DatabaseSessionManager:
     def __init__(self, session_url: str, engine_kwargs: dict[str, Any] = {}):
@@ -13,27 +19,16 @@ class DatabaseSessionManager:
         )
 
     async def close(self):
+        """Cierra el motor de la base de datos de forma segura."""
         if self._engine is None:
             raise Exception("Database session manager is not initialized")
-        await self._engine.dispose()  # Ahora es una función async
-
+        await self._engine.dispose()
         self._engine = None
         self._sessionmaker = None
 
     @contextlib.asynccontextmanager
-    async def connect(self) -> AsyncIterator[AsyncSession]:
-        if self._engine is None:
-            raise Exception("Database session manager is not initialized")
-
-        async with self._engine.begin() as connection:
-            try:
-                yield connection
-            except Exception as ex:
-                await connection.rollback()
-                raise ex
-
-    @contextlib.asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
+        """Proporciona una sesión de base de datos de forma segura."""
         if self._sessionmaker is None:
             raise Exception("Database session manager is not initialized")
 
@@ -47,14 +42,21 @@ class DatabaseSessionManager:
                 await session.close()
 
 
-# Inicialización del session manager con configuración asíncrona
+# Inicialización del session manager con configuración optimizada
 sessionmanager = DatabaseSessionManager(
-    settings.DATABASE_URL, {"echo": settings.ECHO_SQL, "pool_size": 120}
+    DATABASE_URL, {"echo": settings.ECHO_SQL, "pool_size": 10, "max_overflow": 20}
 )
 
 
 # Dependencia para FastAPI: Obtener sesión async
-async def get_db_session():
+async def get_db_session() -> AsyncIterator[AsyncSession]:
+    """Retorna una sesión de base de datos para FastAPI."""
     async with sessionmanager.session() as session:
-        async with session.begin():
+        try:
             yield session
+            if session.in_transaction():
+                await session.commit()
+        except Exception as ex:
+            if session.in_transaction():
+                await session.rollback()
+            raise ex

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 import bcrypt
 import re
@@ -31,7 +31,7 @@ class User(Base):
         Boolean, nullable=False, default=True, index=True
     )
     last_login: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.now()
+        DateTime, nullable=False, default=func.now()
     )
     is_staff: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

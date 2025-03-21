@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Dict, Any
 from src.database import get_db_session
 from src.models.models import User
 from src.services.activity_services import ActivityService
@@ -106,7 +106,7 @@ async def delete_activity(
     activity_id: str,
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-) -> dict[str:str]:
+) -> Dict[str, Any]:
     """
     Permite a un usuario autenticado eliminar una actividad si es el dueño.
 
@@ -116,7 +116,7 @@ async def delete_activity(
         current_user (User): Usuario autenticado
 
     Returns:
-        dict: Mensaje de confirmacion de eliminacion
+        Dict: Mensaje de confirmacion de eliminacion
     """
     try:
         await ActivityService.delete_activity(
