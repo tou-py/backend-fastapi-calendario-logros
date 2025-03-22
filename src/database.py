@@ -17,14 +17,17 @@ class DatabaseSessionManager:
         self._sessionmaker = sessionmaker(
             bind=self._engine, class_=AsyncSession, expire_on_commit=False
         )
+        self._is_closed = False
 
     async def close(self):
         """Cierra el motor de la base de datos de forma segura."""
+        if self._is_closed:
+            return
         if self._engine is None:
             raise Exception("Database session manager is not initialized")
+
         await self._engine.dispose()
-        self._engine = None
-        self._sessionmaker = None
+        self._is_closed = True
 
     @contextlib.asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
@@ -54,9 +57,8 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
     async with sessionmanager.session() as session:
         try:
             yield session
+        except Exception as ex:
+            await session.rollback()
+        finally:
             if session.in_transaction():
                 await session.commit()
-        except Exception as ex:
-            if session.in_transaction():
-                await session.rollback()
-            raise ex
