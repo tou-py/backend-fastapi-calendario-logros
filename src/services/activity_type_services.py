@@ -50,3 +50,12 @@ class ActivityTypeService:
                 await ActivityType.delete(session, type_id)
         except Exception as ex:
             raise ValueError("Tipo de ctividad no encontrado")
+
+    @staticmethod
+    async def get_activity_types(
+        session: AsyncSession, user_id: str, page: int = 1, page_size: int = 1
+    ) -> List[ActivityType]:
+        activity_types = await ActivityType.read_all(
+            session, page=page, page_size=page_size, filters=None
+        )
+        return activity_types

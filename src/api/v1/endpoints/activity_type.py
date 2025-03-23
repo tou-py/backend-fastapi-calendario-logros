@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 from src.database import get_db_session
 from src.models.models import User
 from src.services.activity_type_services import ActivityTypeService
@@ -30,6 +31,31 @@ async def create_activity_type_route(
         return ActivityTypeResponse.model_validate(new_type)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/activity_types", response_model=List[ActivityTypeResponse])
+async def get_activity_types_route(
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Obtiene los tipos de actividad de un usuario autenticado
+
+    Args:
+        session (AsyncSession): Sesión de base de datos.
+        current_user (User): Usuario autenticado.
+
+    Returns:
+        List[ActivityTypeResponse]: Lista de tipos de actividad
+
+    """
+    activity_types = await ActivityTypeService.get_activity_types(
+        session, user_id=current_user.id, page=1, page_size=1
+    )
+    return [
+        ActivityTypeResponse.model_validate(activity_type)
+        for activity_type in activity_types
+    ]
 
 
 @router.put("/{type_id}", response_model=ActivityTypeResponse)

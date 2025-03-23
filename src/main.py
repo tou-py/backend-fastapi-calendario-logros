@@ -39,7 +39,12 @@ async def lifespan(app: FastAPI):
     await sessionmanager.close()
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    title="Calendario de Logros",
+    version="0.0.1",
+    summary="Una API que te ayuda a registrar y ver tus logros y actividades",
+)
 
 
 @app.get("/")
