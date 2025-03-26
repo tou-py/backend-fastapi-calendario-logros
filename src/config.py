@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "redis"
     REDIS_PORT: str = "6379"  # Como cadena para compatibilidad con .env
 
+    # Configuracion de CORS
+    ALLOWED_ORIGINS: str
+    ALLOWED_METHODS: str
+    ALLOWED_HEADERS: str
+    ALLOW_CREDENTIALS: bool
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -3,6 +3,7 @@ import asyncio
 import asyncpg
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from src.config import settings
 from src.database import sessionmanager
 from src.models.models import Base
@@ -44,6 +45,16 @@ app = FastAPI(
     title="Calendario de Logros",
     version="0.0.1",
     summary="Una API que te ayuda a registrar y ver tus logros y actividades",
+)
+
+origins = settings.ALLOWED_ORIGINS.split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=settings.ALLOW_CREDENTIALS,
+    allow_methods=settings.ALLOWED_METHODS.split(","),
+    allow_headers=settings.ALLOWED_HEADERS,
 )
 
 
