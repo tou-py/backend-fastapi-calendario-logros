@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.config import settings
 from src.database import sessionmanager
-from src.models.models import Base
+from src.crud.base import Base
 from src.api.v1.endpoints.auth import router as users_router
 from src.api.v1.endpoints.activities import router as activities_router
 from src.api.v1.endpoints.activity_type import router as activity_types_router

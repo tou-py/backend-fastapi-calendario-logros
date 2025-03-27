@@ -1,7 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.exc import IntegrityError
-from typing import List, Optional
+from typing import Optional
 from src.models.models import Activity, User, ActivityType
 
 

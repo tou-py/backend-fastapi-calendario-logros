@@ -1,9 +1,8 @@
 from sqlalchemy import MetaData, select, func, inspect, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
-from typing import Type, TypeVar, Optional, Tuple, List, Any, Dict, Union
+from typing import Type, TypeVar, Optional, Tuple, List, Any, Union
 from datetime import datetime
 from src.utils.validator import DataValidator
 

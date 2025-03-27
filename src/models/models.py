@@ -4,10 +4,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any
+from datetime import datetime
+from typing import List
 import bcrypt
-import re
 import uuid
 from src.crud.base import Base
 
